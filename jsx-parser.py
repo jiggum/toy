@@ -1,11 +1,10 @@
 import re
 import sys
 
-openSCs = r"((?!\\(?:\\\\)*)(?:\"\"\")|(?:/\*)|[`'\"\(\[\{]|\${)"
-closeSCs = r"((?!\\(?:\\\\)*)(?:\"\"\")|(?:\*/)|[`'\"\)\]\}])"
-totalSCs = r"((?!\\(?:\\\\)*)(?:\"\"\")|(?:/*)|(?:\*/)|[`'\"\(\[\{\)\]\}]|\${)"
-stringSCs = r"([`'\"])"
-remarkSCs = r"((?:\\\\)|(?:/\*)|(?:\\n)|(?:\*/))"
+openSCs = r"((?!\\(?:\\\\)*)(?:\"\"\")|[`'\"\(\[\{]|\${)"
+closeSCs = r"((?!\\(?:\\\\)*)(?:\"\"\")|[`'\"\)\]\}])"
+totalSCs = r"((?!\\(?:\\\\)*)(?:\"\"\")|[`'\"\(\[\{\)\]\}]|\${)"
+stringScs = r"([`'\"])"
 openTagReg = r"(<((?:(?!\W).)*))"
 closeTagReg= r"(/>|</((?:(?!\W).)*)>)"
 
@@ -17,9 +16,7 @@ def isOpenSC(symbol):
 def isCloseSC(symbol):
     return isMatchExactly(closeSCs, symbol)
 def isStringSc(symbol):
-    return isMatchExactly(stringSCs, symbol)
-def isRemarkTag(symbol):
-    return isMatchExactly(remarkSCs, symbol)
+    return isMatchExactly(stringScs, symbol)
 def isOpenTagStart(symbol):
     return isMatchExactly(openTagReg, symbol)
 def isCloseTag(symbol):
@@ -40,11 +37,7 @@ def getSymbolPair(srcSymbol):
         ("{","}"),
         ("}","{"),
         ("${","}"),
-        ("}","${"),
-        ("//","\\n"),
-        ("\\n","//"),
-        ("/*","*/"),
-        ("*/","/*"),
+        ("}","${")
     ]
     #openTag ex) <span
     openTagMatch = re.match(openTagReg, srcSymbol)
@@ -65,6 +58,28 @@ def getSymbolPair(srcSymbol):
         symbolPairs.append((">", closeTag))
         symbolPairs.append(("</%s>"%(closeTagName),closeTag))
     return [symbol[1] for symbol in symbolPairs if symbol[0] == srcSymbol]
+    #if symbol=="\"\"\"":
+        #return "\"\"\""
+    #if symbol=="`":
+        #return "`"
+    #if symbol=="'":
+        #return "'"
+    #if symbol=="\"":
+        #return "\""
+    #if symbol=="(":
+        #return ")"
+    #if symbol==")":
+        #return "("    
+    #if symbol=="[":
+        #return "]"
+    #if symbol=="[":
+        #return "]"    
+    #if symbol=="{":
+        #return "}"
+    #if symbol=="<":
+        #return ">"
+    #if symbol=="${":
+        #return "}"    
 
 def findCloseSymbol(targetSymbol, string, openSymbolStacks=[]):
     index = 0
@@ -109,7 +124,7 @@ def parseString(string, openSymbolStacks=[]):
             if isStringSc(openSymbolStacks[-1]):
                 if not searchedSymbol == "${":
                     index+=1
-                    continue  
+                    continue            
         if isOpenSC(searchedSymbol):
             _string = string[index + 1:]
             _openSymbolStacks = openSymbolStacks + [searchedSymbol]
