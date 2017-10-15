@@ -1,5 +1,4 @@
 import re
-import sys
 
 #pattern must be inside of r"()"
 patternWithOutBackSlash = r"(?!\\(?:\\\\)*)"
@@ -100,8 +99,60 @@ def findPatternClose(targetSymbol, string, openSymbolStacks=[]):
         index+=1
 
 
-
 def parseString(string, openSymbolStacks=[], debug=False):
+    contents = []
+    if debug:
+        print "%sStart Parsing, opensymbolStacks : %s"%("¦¢ " * len(openSymbolStacks), openSymbolStacks)
+    startIndex = 0
+    endIndex = 0
+    content = ""
+    while endIndex < len(string):
+        startIndex = endIndex
+        currentString = string[startIndex:]
+        if debug:
+            print ("%sParsing Loop string : %s"%("¦¢ " * len(openSymbolStacks), len(string) - startIndex > 30 and currentString[:30] + "  ..." or currentString)).replace("\n", "\\n")
+        searchedSymbolMatch = re.search(patternTotal, currentString)
+        if not searchedSymbolMatch:
+            if debug:
+                print "%sThere Is No Searched Symbol"%("¦¢ " * len(openSymbolStacks))
+            return -1, -1, contents
+        searchedSymbol = searchedSymbolMatch.groups()[0]        
+        startIndex += searchedSymbolMatch.start()
+        endIndex = startIndex + len(searchedSymbol)
+        if openSymbolStacks:
+            #Detacted CloseSC
+            if searchedSymbol in getPatternPairClose(openSymbolStacks[-1]): 
+                if debug:
+                    print "%sFinded Close Symbol : %s"%("¦¢ " * len(openSymbolStacks), searchedSymbol)
+                #If Parents' Symbol is Tag but Not Perfect
+                if isPatternTagOpen(openSymbolStacks[-1]) and searchedSymbol == ">":
+                    openSymbolStacks[-1] = openSymbolStacks[-1] + ">"
+                    continue
+                #If Parents' Symbol is String
+                if isPatternString(openSymbolStacks[-1]) and not searchedSymbol == "${":
+                    content += currentString[:searchedSymbolMatch.start()]
+                    contents.append(content)
+                return startIndex, endIndex, contents
+            #If Parents' Symbol is String Symbol ex) ` | ' | "
+            if isPatternString(openSymbolStacks[-1]) and not searchedSymbol == "${":
+                content += currentString[:searchedSymbolMatch.end()]
+                continue      
+            #If Parents' Symbol is Aannotation Symbol ex) // | /*
+            if isPatternAannotation(searchedSymbol):
+                continue
+        if isPatternOpen(searchedSymbol):
+            #If Parents' Symbol is Perfect Tag
+            if openSymbolStacks and isPatternString(openSymbolStacks[-1]):
+                content += currentString[:searchedSymbolMatch.start()]     
+            _string = string[endIndex:]
+            _openSymbolStacks = openSymbolStacks + [searchedSymbol]
+            _startIndex, _endIndex, _contents = parseString(_string, _openSymbolStacks, debug)
+            contents = contents + _contents
+            endIndex += _endIndex
+            continue
+    return startIndex, endIndex, contents
+
+def parseJSX(string, openSymbolStacks=[], debug=False):
     contents = []
     if debug:
         print "%sStart Parsing, opensymbolStacks : %s"%("¦¢ " * len(openSymbolStacks), openSymbolStacks)
@@ -111,7 +162,7 @@ def parseString(string, openSymbolStacks=[], debug=False):
         startIndex = endIndex
         currentString = string[startIndex:]
         if debug:
-            print ("%sParsing Loop string : %s"%("¦¢ " * len(openSymbolStacks), len(string) - startIndex > 30 and currentString[:startIndex+30] + "  ..." or currentString)).replace("\n", "\\n")
+            print ("%sParsing Loop string : %s"%("¦¢ " * len(openSymbolStacks), len(string) - startIndex > 30 and currentString[:30] + "  ..." or currentString)).replace("\n", "\\n")
         searchedSymbolMatch = re.search(patternTotal, currentString)
         if not searchedSymbolMatch:
             if debug:
@@ -147,7 +198,7 @@ def parseString(string, openSymbolStacks=[], debug=False):
                 contents.append(content)                
             _string = string[endIndex:]
             _openSymbolStacks = openSymbolStacks + [searchedSymbol]
-            _startIndex, _endIndex, _contents = parseString(_string, _openSymbolStacks)
+            _startIndex, _endIndex, _contents = parseJSX(_string, _openSymbolStacks, debug)
             contents = contents + _contents
             endIndex += _endIndex
             continue
