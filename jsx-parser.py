@@ -9,7 +9,7 @@ patternAnnotationClose = r"((?:\\n)|(?:\*/))"
 patternAnnotationTotal = re.compile("(%s)"%("|".join([patternAnnotationOpen[1:-1], patternAnnotationOpen[1:-1]]))).pattern
 patternTagOpen = r"((?:<((?:((?!\W).)|\.)+)))"
 patternTagOpenPerfect = r"((?:<((?:((?!\W).)|\.)+)>))"
-patternTagClose = r"((?:/>))"
+patternTagClose = r"(/?>)"
 patternTagClosePerfect = "((?:</((?:((?!\W).)|\.)+)>))"
 patternTagTotal = re.compile("(%s)"%("|".join([patternTagOpenPerfect[1:-1], patternTagOpen[1:-1], patternTagClosePerfect[1:-1], patternTagClose[1:-1]]))).pattern
 patternBracketOpen = r"(\${|[\(\[\{])"
@@ -93,6 +93,7 @@ def findPatternClose(targetSymbol, string, openSymbolStacks=[]):
         if isPatternOpen(searchedSymbol):
             _closeSymbol = getPatternPairClose(searchedSymbol)[0]
             _string = string[index + 1:]
+            print 1, _string
             _openSymbolStacks =openSymbolStacks + [searchedSymbol]
             _index, openSymbolStacks = findPatternClose(_closeSymbol, _string, _openSymbolStacks)
             index += _index + 1
@@ -100,30 +101,39 @@ def findPatternClose(targetSymbol, string, openSymbolStacks=[]):
 
 
 
-def parseString(string, openSymbolStacks=[]):
-    print "%sStart Parsing, opensymbolStacks : %s"%("¦¢ " * len(openSymbolStacks), openSymbolStacks)
+def parseString(string, openSymbolStacks=[], debug=False):
+    contents = []
+    if debug:
+        print "%sStart Parsing, opensymbolStacks : %s"%("¦¢ " * len(openSymbolStacks), openSymbolStacks)
     startIndex = 0
     endIndex = 0
-    while True:
+    while endIndex < len(string):
         startIndex = endIndex
-        print ("%sParsing Loop string : %s"%("¦¢ " * len(openSymbolStacks), len(string) - startIndex > 30 and string[startIndex:startIndex+30] + "  ..." or string[startIndex:])).replace("\n", "\\n")
-        searchedSymbolMatch = re.search(patternTotal, string[startIndex:])
+        currentString = string[startIndex:]
+        if debug:
+            print ("%sParsing Loop string : %s"%("¦¢ " * len(openSymbolStacks), len(string) - startIndex > 30 and currentString[:startIndex+30] + "  ..." or currentString)).replace("\n", "\\n")
+        searchedSymbolMatch = re.search(patternTotal, currentString)
         if not searchedSymbolMatch:
-            print "%sThere Is No Searched Symbol"%("¦¢ " * len(openSymbolStacks))
-            return
+            if debug:
+                print "%sThere Is No Searched Symbol"%("¦¢ " * len(openSymbolStacks))
+            return -1, -1, contents
         searchedSymbol = searchedSymbolMatch.groups()[0]        
-        #print "%sSearched Symbol : %s"%("¦¢ " * len(openSymbolStacks), searchedSymbol)
         startIndex += searchedSymbolMatch.start()
         endIndex = startIndex + len(searchedSymbol)
         if openSymbolStacks:
             #Detacted CloseSC
             if searchedSymbol in getPatternPairClose(openSymbolStacks[-1]): 
-                print "%sFinded Close Symbol : %s"%("¦¢ " * len(openSymbolStacks), searchedSymbol)
+                if debug:
+                    print "%sFinded Close Symbol : %s"%("¦¢ " * len(openSymbolStacks), searchedSymbol)
                 #If Parents' Symbol is Tag but Not Perfect
-                if isPatternTagOpen(openSymbolStacks[-1]) and searchedSymbol ==">":
+                if isPatternTagOpen(openSymbolStacks[-1]) and searchedSymbol == ">":
                     openSymbolStacks[-1] = openSymbolStacks[-1] + ">"
                     continue
-                return startIndex, endIndex
+                #If Parents' Symbol is Perfect Tag
+                if isPatternTagOpenPerfect(openSymbolStacks[-1]):
+                    content = currentString[:searchedSymbolMatch.start()]
+                    contents.append(content)
+                return startIndex, endIndex, contents
             #If Parents' Symbol is String Symbol ex) ` | ' | "
             if isPatternString(openSymbolStacks[-1]) and not searchedSymbol == "${":
                 continue      
@@ -131,8 +141,20 @@ def parseString(string, openSymbolStacks=[]):
             if isPatternAannotation(searchedSymbol):
                 continue
         if isPatternOpen(searchedSymbol):
-            #_string = string[endIndex:]
+            #If Parents' Symbol is Perfect Tag
+            if openSymbolStacks and isPatternTagOpenPerfect(openSymbolStacks[-1]):
+                content = currentString[:searchedSymbolMatch.start()]
+                contents.append(content)                
+            _string = string[endIndex:]
             _openSymbolStacks = openSymbolStacks + [searchedSymbol]
-            _startIndex, _endIndex = parseString(_string, _openSymbolStacks)
+            _startIndex, _endIndex, _contents = parseString(_string, _openSymbolStacks)
+            contents = contents + _contents
             endIndex += _endIndex
             continue
+    return startIndex, endIndex, contents
+
+def contentsFilter(_contents):
+    return [\
+        content.strip() for content in _contents \
+        if content.strip() and \
+        re.search(r"[°¡-ÆR]", content)]
