@@ -1,33 +1,43 @@
 import re
 import sys
 
-openSCs = r"((?!\\(?:\\\\)*)(?:\"\"\")|(?:\\\\)|(?:/\*)|[`'\"\(\[\{]|\${)"
-closeSCs = r"((?!\\(?:\\\\)*)(?:\"\"\")|(?:\\n)|(?:\*/)|[`'\"\)\]\}])"
-totalSCs = r"((?!\\(?:\\\\)*)(?:\"\"\")|(?:\\\\)|(?:/\*)|(?:\\n)|(?:\*/)|[`'\"\(\[\{\)\]\}]|\${)"
-stringSCs = r"([`'\"])"
-annotationSCs = r"((?:\\\\)|(?:/\*)|(?:\\n)|(?:\*/))"
-openTagReg = r"(<((?:(?!\W).)*))"
-closeTagReg= r"(/>|</((?:(?!\W).)*)>)"
+patternWithOutBackSlash = r"(?!\\(?:\\\\)*)"
+patternString = r"((?:\"\"\")|[`'\"])"
+patternAnnotationOpen = r"((?://)|(?:/\*))"
+patternAnnotationClose = r"((?:\\n)|(?:\*/))"
+patternAnnotationTotal = re.compile("(%s)"%("|".join([patternAnnotationOpen[1:-1], patternAnnotationOpen[1:-1]]))).pattern
+patternTagOpen = r"((?:<((?:(?!\W).)*)))"
+patternTagOpenPerfect = r"((?:<((?:(?!\W).)*)>))"
+patternTagClose = r"((?:/>))"
+patternTagClosePerfect = r"((?:</((?:(?!\W).)*)>))"
+patternTagTotal = re.compile("(%s)"%("|".join([patternTagOpenPerfect[1:-1], patternTagOpen[1:-1], patternTagClosePerfect[1:-1], patternTagClose[1:-1]]))).pattern
+patternOpen = re.compile("(%s%s)"%(r"(?!\\(?:\\\\)*)", "|".join([patternString[1:-1], patternAnnotationOpen[1:-1], patternTagOpenPerfect[1:-1], patternTagOpen[1:-1]]))).pattern
+patternClose = re.compile("(%s%s)"%(r"(?!\\(?:\\\\)*)", "|".join([patternString[1:-1], patternAnnotationClose[1:-1], patternTagClosePerfect[1:-1], patternTagClose[1:-1]]))).pattern
+patternTotal = re.compile("(%s%s)"%(r"(?!\\(?:\\\\)*)", "|".join([patternString[1:-1], patternAnnotationTotal[1:-1], patternTagTotal[1:-1]]))).pattern
 
 # index
-def isSc(symbol):
-    return isMatchExactly(totalSCs, symbol)
-def isOpenSC(symbol):
-    return isMatchExactly(openSCs, symbol)
-def isCloseSC(symbol):
-    return isMatchExactly(closeSCs, symbol)
-def isStringSC(symbol):
-    return isMatchExactly(stringSCs, symbol)
-def isAannotationSC(symbol):
-    return isMatchExactly(annotationSCs, symbol)
-def isOpenTagStart(symbol):
-    return isMatchExactly(openTagReg, symbol)
-def isCloseTag(symbol):
-    return isMatchExactly(closeTagReg, symbol)
-def isMatchExactly(reg, symbol):
-    return bool(re.match(r"^" + reg + r"$", symbol))
+def isPattern(symbol):
+    return matchExactly(patternTotal, symbol)
+def isPatternOpen(symbol):
+    return matchExactly(patternOpen, symbol)
+def isPatternClose(symbol):
+    return matchExactly(patternClose, symbol)
+def isPatternString(symbol):
+    return matchExactly(patternString, symbol)
+def isPatternAannotation(symbol):
+    return matchExactly(patternAnnotationTotal, symbol)
+def isPatternTagOpen(symbol):
+    return matchExactly(patternTagOpen, symbol)
+def isPatternTagOpenPerfect(symbol):
+    return matchExactly(patternTagOpenPerfect, symbol)
+def isPatternTagClose(symbol):
+    return matchExactly(patternTagClose, symbol)
+def isPatternTagClosePerfect(symbol):
+    return matchExactly(patternTagClosePerfect, symbol)
+def matchExactly(reg, symbol):
+    return re.match(r"^" + reg + r"$", symbol)
 
-def getSymbolPair(srcSymbol):
+def getPatternlPair(srcSymbol):
     symbolPairs=[
         ("\"\"\"","\"\"\""),
         ("`","`"),
@@ -47,16 +57,23 @@ def getSymbolPair(srcSymbol):
         ("*/","/*"),
     ]
     #openTag ex) <span
-    openTagMatch = re.match(openTagReg, srcSymbol)
+    openTagMatch = matchExactly(patternTagOpen, srcSymbol)
     if openTagMatch:
         openTag = openTagMatch.groups()[0]
         openTagName = openTagMatch.groups()[1]
         symbolPairs.append((openTag,">"))
-        symbolPairs.append((openTag,"</%s>"%(openTagName)))
         symbolPairs.append((">", openTag))
-        symbolPairs.append(("</%s>"%(openTagName),openTag))
+        symbolPairs.append((openTag,"\\>"))
+        symbolPairs.append(("\\>", openTag))
+    #openTagPerfect ex) <span>
+    openTagPerfectMatch = matchExactly(patternTagOpenPerfect, srcSymbol)
+    if openTagPerfectMatch:
+        openTagPerfect = openTagPerfectMatch.groups()[0]
+        openTagPerfectName = openTagPerfectMatch.groups()[1]
+        symbolPairs.append((openTagPerfect,"</%s>"%(openTagPerfectName)))
+        symbolPairs.append(("</%s>"%(openTagPerfectName),openTagPerfect))        
     #closeTag ex) /> or </span>
-    closeTagMatch = re.match(closeTagReg, srcSymbol) 
+    closeTagMatch = re.match(patternTagClose, srcSymbol) 
     if closeTagMatch:
         closeTag = closeTagMatch.groups()[0]
         closeTagName = closeTagMatch.groups()[1]   
@@ -66,10 +83,10 @@ def getSymbolPair(srcSymbol):
         symbolPairs.append(("</%s>"%(closeTagName),closeTag))
     return [symbol[1] for symbol in symbolPairs if symbol[0] == srcSymbol]
 
-def findCloseSymbol(targetSymbol, string, openSymbolStacks=[]):
+def findPatternClose(targetSymbol, string, openSymbolStacks=[]):
     index = 0
     while True:
-        searchedSymbolMatch = re.search(totalSCs, string[index:])
+        searchedSymbolMatch = re.search(patternTotal, string[index:])
         if not searchedSymbolMatch:
             return
         index += searchedSymbolMatch.start()
@@ -78,11 +95,11 @@ def findCloseSymbol(targetSymbol, string, openSymbolStacks=[]):
             print 1, openSymbolStacks
             return index, openSymbolStacks[:-1]
         #print searchedSymbol, targetSymbol
-        if isOpenSC(searchedSymbol):
-            _closeSymbol = getSymbolPair(searchedSymbol)[0]
+        if isPatternOpen(searchedSymbol):
+            _closeSymbol = getPatternlPair(searchedSymbol)[0]
             _string = string[index + 1:]
             _openSymbolStacks =openSymbolStacks + [searchedSymbol]
-            _index, openSymbolStacks = findCloseSymbol(_closeSymbol, _string, _openSymbolStacks)
+            _index, openSymbolStacks = findPatternClose(_closeSymbol, _string, _openSymbolStacks)
             index += _index + 1
         index+=1
 
@@ -95,7 +112,7 @@ def parseString(string, openSymbolStacks=[]):
     while True:
         startIndex = endIndex
         print ("%sParsing Loop string : %s"%("¦¢ " * len(openSymbolStacks), len(string) - startIndex > 30 and string[startIndex:startIndex+30] + "  ..." or string[startIndex:])).replace("\n", "\\n")
-        searchedSymbolMatch = re.search(totalSCs, string[startIndex:])
+        searchedSymbolMatch = re.search(patternTotal, string[startIndex:])
         if not searchedSymbolMatch:
             print "%sThere Is No Searched Symbol"%("¦¢ " * len(openSymbolStacks))
             return
@@ -105,17 +122,17 @@ def parseString(string, openSymbolStacks=[]):
         endIndex = startIndex + len(searchedSymbol)
         if openSymbolStacks:
             #Detacted CloseSC
-            if openSymbolStacks[-1] in getSymbolPair(searchedSymbol): 
+            if openSymbolStacks[-1] in getPatternlPair(searchedSymbol): 
                 print "%sFinded Close Tag : %s"%("¦¢ " * len(openSymbolStacks), searchedSymbol)
                 return startIndex, endIndex
             #If Parents' Symbol is String Symbol ex) ` | ' | "
-            if isStringSC(openSymbolStacks[-1]):
+            if isPatternString(openSymbolStacks[-1]):
                 if not searchedSymbol == "${":
                     continue      
             #If Parents' Symbol is Aannotation Symbol ex) // | /*
-            if isAannotationSC(searchedSymbol):
+            if isPatternAannotation(searchedSymbol):
                 continue                 
-        if isOpenSC(searchedSymbol):
+        if isPatternOpen(searchedSymbol):
             _string = string[endIndex:]
             _openSymbolStacks = openSymbolStacks + [searchedSymbol]
             _startIndex, _endIndex = parseString(_string, _openSymbolStacks)
